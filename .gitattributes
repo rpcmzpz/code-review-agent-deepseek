@@ -1,0 +1,3 @@
+# 静态前端资源不计入 GitHub 语言统计
+# （否则 index.html 的字节数会盖过后端代码，让仓库主语言误显示为 HTML）
+src/main/resources/static/** linguist-vendored
