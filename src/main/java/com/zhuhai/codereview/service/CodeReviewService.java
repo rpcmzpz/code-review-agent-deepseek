@@ -60,9 +60,16 @@ public class CodeReviewService {
   private DimResult reviewByDimension(String dimension, CodeReviewRequest request) {
       try {
         String systemPrompt = buildPrompt(dimension);
+        String userContent = "请审查以下代码：\n" + request.getCode()
+            + "\n语言：" + request.getLanguage()
+            + "\n若标注语言与代码实际内容不符，以代码的实际内容为准";
+        // 用户在界面上填的补充说明一并带给模型
+        if (request.getContext() != null && !request.getContext().isBlank()) {
+          userContent += "\n补充说明：" + request.getContext();
+        }
         List<Map<String, String>> messages = List.of(
             Map.of("role", "system", "content", systemPrompt),
-            Map.of("role", "user", "content", "请审查以下代码：\n" + request.getCode() + "\n语言：" + request.getLanguage() + "\n若标注语言与代码实际内容不符，以代码的实际内容为准")
+            Map.of("role", "user", "content", userContent)
         );
         String responseJson = deepSeekClient.chat(messages);
         responseJson = responseJson.replaceAll("^```(json)?|```$", "").trim();
@@ -94,11 +101,16 @@ public class CodeReviewService {
         .filter(s -> !s.isEmpty())
         .collect(Collectors.joining(" | "));
 
+      // 只有「所有维度都没返回任何内容」才算失败，避免把网络异常伪装成“未发现问题”
+      boolean allFailed = !results.isEmpty() && results.stream()
+        .allMatch(r -> r.issues().isEmpty() && r.summary().isEmpty());
+
       CodeReviewResponse response = new CodeReviewResponse();
-      response.setSuccess(true);
+      response.setSuccess(!allFailed);
       response.setIssues(issues);
       response.setTotalIssues(issues.size());
-      response.setSummary(mergedSummary.isEmpty() ? "审查完成" : mergedSummary);
+      response.setSummary(allFailed ? "所有维度审查均失败，请稍后重试"
+          : (mergedSummary.isEmpty() ? "审查完成" : mergedSummary));
       return response;
     }
   
